@@ -1,0 +1,235 @@
+---
+title: "STA141C Final Project"
+author: 
+- "Abdallah Anees, Wanxin Hu, Stephanie Olivera, Hangyu Yue"
+
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\center
+\raggedright
+\newpage
+
+# The Dataset
+In this analysis, we will by studying the Air Quality Data Set from the UCI Machine Learning Repository. This data was recorded in a significantly polluted area in an Italian City from March 2004 through February 2005. 
+
+The data set is made up of 9358 instances where each instance contains the hourly averaged responses from 5 metal oxide sensors embedded in a gas multisensor device. These average concentrations are denoted by PT08.S1, PT08.S2, PT08.S3, PT08.S4 and PT08.S5. The true chemical concentrations are also provided by a co-located reference certified analyzer. The chemicals of interest in this data set are CO, Non Metanic Hydrocarbons(NMHC), Benzene(C6H6), Total Nitrogen Oxides (NOx) and Nitrogen Dioxide (NO2). The first few observations of the dataset are shown below:
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library(tidyverse)
+library(readxl)     
+data <- read_excel("AirQualityUCI.xlsx")
+data <- as.data.frame(data)
+data %>% head(3)
+```
+
+# Exploratory Data Analysis
+Before beginning our analysis, we wanted to study the data to determine which information to consider in our statistical analysis.
+
+## Data Preprocessing
+We found that this data set has many missing values. The missing values are tagged with the value -200. We first identify these missing values and replace them with `NA's`. We did this so that the -200 values would not affect our computations.
+
+The next step in our data preprocessing is to add information about the month, day, and hour for each recording. To do this, we simply extract the month and day from the POSIX Date column and extract the hour from the POSIX Time Column. We then add these three new columns to our data frame using mutate().
+
+Our final processed data is shown below.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+# Replace -200 with `NA's`
+data[data==-200] <- NA
+
+## Add month, day, hour as additional columns
+data <- data %>%
+  mutate(
+    month = as.double(format(data$Date, "%m")),
+    day = as.double(format(data$Date, "%d")),
+    hour = as.double(format(data$Time, "%H"))
+)
+data %>% head(3)
+```
+
+## Data Exploration
+
+### Identifying Correlations within the 5 Metal Oxide Chemical Sensors
+We first created a scatter plot matrix of the 5 metal oxide chemical sensor readings to try to identify potential correlations among the chemical levels. From the scatter plot below, it is evident that a positive correlation exists between any two variables in CO, NMHC, NO2 and O3. We can also see that there is a negative correlation between NOx and all other variables CO, NMHC, NO2 and O3.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+pairs(~`PT08.S1(CO)`+`PT08.S2(NMHC)`+`PT08.S3(NOx)`+
+        `PT08.S4(NO2)`+`PT08.S5(O3)`, data = data, main = "Scatter plot matrix of 5 metal oxide chemical sensor")
+```
+
+### Computing Average Chemical Levels per Hour
+We determined the average level of each chemical per hour and created a table. We then used this table to plot the average level of each chemical for each hour. From the plots shown below, it is clear that there are certain hours of the day that tend to have the highest concentrations of chemicals CO, NMHC, NO2 and O3. For example, at hour 8, these chemicals are all at maximium average concentration while NOx is at the minimum average concentration.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+av_data_h <- data %>%
+  group_by(hour) %>%
+  summarize(
+    av_CO = mean(`PT08.S1(CO)`, na.rm = TRUE),
+    av_NMHC = mean(`PT08.S2(NMHC)`, na.rm = TRUE),
+    av_NOx = mean(`PT08.S3(NOx)`, na.rm = TRUE),
+    av_NO2 = mean(`PT08.S4(NO2)`, na.rm = TRUE),
+    av_O3 = mean(`PT08.S5(O3)`, na.rm = TRUE),
+  )
+
+## Display the 5 average metal oxide chemical sensors
+library(gridExtra)
+p1 <- ggplot(av_data_h, aes(x=hour, y=av_CO)) + geom_point()
+p2 <- ggplot(av_data_h, aes(x=hour, y=av_NMHC)) + geom_point()
+p3 <- ggplot(av_data_h, aes(x=hour, y=av_NOx)) + geom_point()
+p4 <- ggplot(av_data_h, aes(x=hour, y=av_NO2)) + geom_point()
+p5 <- ggplot(av_data_h, aes(x=hour, y=av_O3)) + geom_point()
+grid.arrange(p1, p2, p3, p4, p5, nrow = 2)
+```
+
+### Correlation between CO and relative humidity across month, day and hour
+To study the correlation between CO levels and relative humidty, we created the following plots of CO vs. Relative Humidity per month, per day, and per hour. It can be noted that there generally a strong positive correlation between CO and Relative Humidity levels per day and per hour.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+co_pollution = ggplot(data, aes(`PT08.S1(CO)`, RH)) + geom_smooth(method = 'lm')
+co_pollution + geom_point(alpha = I(1/5)) + facet_grid(.~month)
+co_pollution + geom_point(alpha = I(1/5)) + facet_grid(.~day)
+co_pollution + geom_point(alpha = I(1/5)) + facet_grid(.~hour)
+```
+
+# Statistical Procedure: Multiple linear Regression
+Let's say we are interested in predicting the concentration of CO. Then we can construct a multiple linear regression based on CO as follows:
+ 
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+#### FINDING CONFIDENCE INTERVAL FOR THESE PREDICTIONS
+fit1 <- lm(`PT08.S1(CO)` ~ `PT08.S2(NMHC)` +`PT08.S3(NOx)` + 
+             `PT08.S4(NO2)` + `PT08.S5(O3)`+`T`+ RH + AH + month + day + hour, data = data)
+# summary(fit1)
+coef(fit1)
+```
+
+From above, we observed that there are some insignificant explanatory variables, and we need to adjust our model. Simply remove insignificant explanatory variables T, AH and `PT08.S3(NOx)`. Our new model is shown below:
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+fit2 <- lm(`PT08.S1(CO)` ~ `PT08.S2(NMHC)` + 
+             `PT08.S4(NO2)` + `PT08.S5(O3)`+ RH + month + hour, data = data)
+# summary(fit2)
+coef(fit2)
+```
+
+# Bootstrap Procedure Applied to Multiple Linear Regression
+In order to find the difference for each chemical based on temperature during the whole year, we need to apply the multiple linear regression model. Due the the large size of the data set, here we will use bag of little bootstrap with our multiple linear regression model:
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+# import data
+# data <- read_excel("~/Desktop/AirQualityUCI/AirQualityUCI.xlsx")
+# data <- read_excel("AirQualityUCI.xlsx")
+
+mydata = data 
+names(mydata)[1]='date'
+names(mydata)[2]='time'
+names(mydata)[3]='CO(GT)'
+names(mydata)[4]='PT08.S1(CO)'
+names(mydata)[5]='NMHC(GT)'
+names(mydata)[6]='C6H6(GT)'
+names(mydata)[7]='PT08.S2(NMHC)'
+names(mydata)[8]='NOx(GT)'
+names(mydata)[9]='PT08.S3(NOx)'
+names(mydata)[10]='NO2(GT)'
+names(mydata)[11]='PT08.S4(NO2)'
+names(mydata)[12]='PT08.S5(O3)'
+names(mydata)[13]='T'
+names(mydata)[14]='RH'
+names(mydata)[15]='AH'
+mydata$V16<-NULL
+mydata$V17<-NULL
+mydata<-mydata[-c(1),]
+# head(mydata)
+
+
+library(rsample)
+library(purrr)
+library(broom)
+library(dplyr)
+set.seed(141)
+n <- nrow(mydata)
+m <- 10
+
+mydata.df = data.frame(mydata$time, mydata$`PT08.S1(CO)`, mydata$`PT08.S2(NMHC)`, mydata$`PT08.S3(NOx)`, mydata$`PT08.S4(NO2)`, mydata$`PT08.S5(O3)`)
+# head(mydata.df)
+```
+
+We then begin our bag of little boot strap procedure by creating a sample_list of 10 samples where each sample contains about 900 observations. The dimensions of our sample_list samples is shown below.
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+fit_1 <- lm(formula = mydata$T ~ mydata$`PT08.S1(CO)` + mydata$`PT08.S2(NMHC)` + mydata$`PT08.S3(NOx)` + mydata$`PT08.S4(NO2)` + mydata$`PT08.S5(O3)`, data = mydata.df)
+
+subsample <- sample(seq_len(m), n, replace = TRUE) 
+sample_list <- mydata.df %>% split(subsample)
+lapply(sample_list, dim) %>% as.data.frame(row.names=c("num_rows","num_cols")) 
+```
+
+We apply BLB to generate the following confidence intervals summarized in Table 1 and Table 2 below.
+
+# Table 1: Confidence Intervals for Linear Model with PT08.S1: CO as the Response
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+# Table 1
+
+bootreg <- data %>% 
+  bootstraps(1000) %>%
+  pull(splits) %>%
+  map_dfr(~ {
+    train_data <- analysis(.)
+    lm(`PT08.S1(CO)` ~ `PT08.S2(NMHC)` + 
+             `PT08.S4(NO2)` + `PT08.S5(O3)`+ RH + day + hour, data = train_data) %>% 
+  tidy()
+  })
+
+summarize = dplyr::summarize
+
+bootreg %>% 
+  group_by(term) %>% 
+  summarize(low=quantile(estimate, .025),
+            high=quantile(estimate, .975))
+
+```
+ 
+
+# Table 2: Confidence Intervals for Linear Model with Temperature as the Response
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+#Table 2
+
+bootreg = data %>% 
+  bootstraps(1000) %>%
+  pull(splits) %>%
+  map_dfr(~ {
+    train_data <- analysis(.)
+    lm(T ~ `PT08.S1(CO)` + `PT08.S2(NMHC)` + `PT08.S3(NOx)` + `PT08.S4(NO2)` + `PT08.S5(O3)` + `CO(GT)` + `NMHC(GT)` + `C6H6(GT)` + `NOx(GT)` + `NO2(GT)`+ RH + hour, data = train_data) %>% 
+  tidy()
+  })
+
+summarize = dplyr::summarize
+
+bootreg %>% 
+  group_by(term) %>% 
+  summarize(low=quantile(estimate, .025),
+            high=quantile(estimate, .975))
+```
+
+# Results
+Our goal here is to create confidence intervals for the coefficients of our Linear Regression model and to change to a different range for each of the 5 chemical compounds.
+
+We used the Bag of Little Bootstraps (BLB) prodcedure, which incorporates features of both bootstrap and subsampling to find a computationally efficient means of the 5 chemical compound estimators in air pollution based on true hourly averaged concentration and the PT08 estimation. 
+
+The confidence intervals provide us with an upper and lower limit around our sample mean. Within this interval, it tells us the range of change of the chemical compound concentrations based on changing tempurature during the entire year. For example, in Table 2 the range of change for the chemical compound NO2 based true hourly averaged concentration is in between (-0.002428212 to 0.0009713231), and for the PT08. of NO2 the confidence interval is in between (0.027210390 to 0.0284737242). Here, we can see the reading for NO2 between the two concetration confidence intervals are different. 
+
+The confidence interval for the PT08. of NO2 is more accurate becuase there is no negative sign which means there is no zero in the confidence interval reading. The true hourly averaged concentration of NO2 confidence interval has a negative negative value for the lower limit. 
+
+Here, since we are measuring based on hourly change, the reading for the concentration is diffeerent for example at 3 am from the reading at 4 pm. The average change of difference in reading of the concentration is based on the activations for the 5 chimical compunds. For example, at 3 am the reading might be low since not a lot of cars and factories are working at that time, while at 3 pm and reading will likely be higher because cars are driven more often and factories are working at this time. 
+
+For example in Table 1, we test the confidence interval difference of PT08 for `PT08.S2(NMHC)`,`PT08.S4(NO2)`,`PT08.S5(O3)` based on the concentration of `PT08.S1(CO)`. From the table, we can see the change is different per hour, per day, and the Relative Humidity RH change per hour in air pollution. Here we can see the concentration rate change for the 3 cheimcal compounds are changing every hour, and their  confidence interval was between 2.01977590 and 2.58940514. and the mean change for Relative Humidity RH every hour is between 1.97842172 and 2.05112489. 
+
+# 5. Code Appendix
+```{r, ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE}
+```
+
+
