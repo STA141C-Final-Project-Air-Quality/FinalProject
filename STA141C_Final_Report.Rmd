@@ -104,8 +104,7 @@ Let's say we are interested in predicting the concentration of CO. Then we can c
 #### FINDING CONFIDENCE INTERVAL FOR THESE PREDICTIONS
 fit1 <- lm(`PT08.S1(CO)` ~ `PT08.S2(NMHC)` +`PT08.S3(NOx)` + 
              `PT08.S4(NO2)` + `PT08.S5(O3)`+`T`+ RH + AH + month + day + hour, data = data)
-# summary(fit1)
-coef(fit1)
+summary(fit1)
 ```
 
 From above, we observed that there are some insignificant explanatory variables, and we need to adjust our model. Simply remove insignificant explanatory variables T, AH and `PT08.S3(NOx)`. Our new model is shown below:
@@ -113,8 +112,7 @@ From above, we observed that there are some insignificant explanatory variables,
 ```{r, warning=FALSE, message=FALSE, echo=FALSE}
 fit2 <- lm(`PT08.S1(CO)` ~ `PT08.S2(NMHC)` + 
              `PT08.S4(NO2)` + `PT08.S5(O3)`+ RH + month + hour, data = data)
-# summary(fit2)
-coef(fit2)
+summary(fit2)
 ```
 
 # Bootstrap Procedure Applied to Multiple Linear Regression
